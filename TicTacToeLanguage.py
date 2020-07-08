@@ -237,9 +237,6 @@ class TicTacToeProjection(object):
             y += 30
             idx += 1
 
-    def fire(self):
-        self.fire_one_transition(self.conf,self.act)
-
     def fire_one_transition(self,source,action):
         target = self.tr.fire_one_transition(source,action)[0][0]
         if self.tr.detect_win(source,[1,0][source[-1]]) == False:

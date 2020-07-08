@@ -164,7 +164,8 @@ class TicTacToeProjection(object):
     def __init__(self, tr, canvas):
         self.tr = tr
         self.canvas = canvas
-        self.l = []
+        self.canvas_items = []
+        self.widget_items = []
         self.canvas.create_rectangle(0, 0, 600, 600, fill='yellow')
         for i in range(0, 600 - 600 // 3, 600 // 3):
             self.canvas.create_line(i + 600 / 3, 0, i + 600 / 3, 600, width=5)
@@ -176,8 +177,9 @@ class TicTacToeProjection(object):
     def projection(self,source):
         self.projection_configuration(source)
         self.projection_action(source)
+        self.action_buttons(source)
         return self.tr.fireable_transitions_from(source)
-        return self.tr.fireable_transitions_from(source)
+
 
     def projection_action(self,configuration):
         def callback(event):
@@ -192,16 +194,16 @@ class TicTacToeProjection(object):
         self.canvas.bind("<Button-1>",callback)
 
     def projection_configuration(self, configuration):
-        for item in self.l:
+        for item in self.canvas_items:
             self.canvas.delete(item)
 
         def draw(idx,x,y):
             c = 80
             if idx == 1:
-                self.l.append(self.canvas.create_line(x - c, y - c, x + c, y + c, width=5, fill='blue'))
-                self.l.append(self.canvas.create_line(x - c, y + c, x + c, y - c, width=5, fill='blue'))
+                self.canvas_items.append(self.canvas.create_line(x - c, y - c, x + c, y + c, width=5, fill='blue'))
+                self.canvas_items.append(self.canvas.create_line(x - c, y + c, x + c, y - c, width=5, fill='blue'))
             elif idx == 0:
-                self.l.append(self.canvas.create_oval(x - c, y - c, x + c, y + c, width=5, outline='red'))
+                self.canvas_items.append(self.canvas.create_oval(x - c, y - c, x + c, y + c, width=5, outline='red'))
 
         def list_to_text(li):
             r = ''
@@ -218,8 +220,30 @@ class TicTacToeProjection(object):
 
         self.canvas.update()
 
-    def fireable_transitions(self,source):
+    def action_buttons(self,source):
+
+        for item in self.widget_items:
+            item.destroy()
         actions = self.tr.fireable_transitions_from(source)
+        y = 0
+        idx = 0
+        for action in actions:
+
+            button = Button(self.canvas,text=str(action),command=lambda info=[source,action]: self.fire_one_transition(info[0],info[1]))
+            self.widget_items.append(button)
+            button.configure(width=20, background= 'Cyan',activebackground="#33B5E5", relief=FLAT)
+            button = self.canvas.create_window(650, y, anchor=NW, window=button)
+
+            y += 30
+            idx += 1
+
+    def fire(self):
+        self.fire_one_transition(self.conf,self.act)
+
+    def fire_one_transition(self,source,action):
+        target = self.tr.fire_one_transition(source,action)[0][0]
+        if self.tr.detect_win(source,[1,0][source[-1]]) == False:
+            self.projection(target)
 
 class TicTacToeMarshaller(AbstractMarshaller):
 
@@ -369,7 +393,7 @@ if __name__ == "__main__":
     canvas = Canvas(root, width=1200, height=600)
     canvas.pack()
 
-    def go(canvas):
+    def go(anvas):
         #server(lambda :create_game(canvas))
 
         game = create_game(canvas)

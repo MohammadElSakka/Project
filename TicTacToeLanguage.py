@@ -5,7 +5,7 @@ from plug_interface import *
 from language_server import *
 from tkinter import *
 import threading
-
+from time import sleep
 
 # nécessaire pour pouvoir executer plusieurs analyses en parallel sur le meme run python
 def synchronized(func):
@@ -113,7 +113,6 @@ class TicTacToeEndGame(AbstractTransitionRelation):
     def fireable_transitions_from(self, source):
 
         if self.detect_win(source, not(source[9]) ) :
-            print("We have a winner: ",['O','X'][not(source[9])])
             return []
 
         return self.tr.fireable_transitions_from(source)
@@ -161,8 +160,8 @@ class TicTacToeRuntimeView(AbstractRuntimeView):
 
 class TicTacToeProjection(object):
 
-    def __init__(self, tr, canvas):
-        self.tr = tr
+    def __init__(self, rules, canvas):
+        self.tr = rules
         self.canvas = canvas
         self.canvas_items = []
         self.widget_items = []
@@ -175,10 +174,18 @@ class TicTacToeProjection(object):
 
 
     def projection(self,source):
+
         self.projection_configuration(source)
-        self.projection_action(source)
-        self.action_buttons(source)
-        return self.tr.fireable_transitions_from(source)
+
+        if source[-1] == 1:
+            target = self.tr.fire_one_transition(source,self.best_move(source))[0][0]
+            self.projection(target)
+        else:
+
+            self.projection_action(source)
+            self.action_buttons(source)
+
+        #return self.tr.fireable_transitions_from(source)
 
 
     def projection_action(self,configuration):
@@ -191,6 +198,7 @@ class TicTacToeProjection(object):
                 action = [tour,x+3*y]
                 target = self.tr.fire_one_transition(configuration, action)[0][0]
             self.projection(target)
+
         self.canvas.bind("<Button-1>",callback)
 
     def projection_configuration(self, configuration):
@@ -229,9 +237,9 @@ class TicTacToeProjection(object):
         idx = 0
         for action in actions:
 
-            button = Button(self.canvas,text=str(action),command=lambda info=[source,action]: self.fire_one_transition(info[0],info[1]))
+            button = Button(self.canvas,text=str(['X','O'][action[0]])+" dans "+str(action[1]),command=lambda info=[source,action]: self.fire_one_transition(info[0],info[1]))
             self.widget_items.append(button)
-            button.configure(width=20, background= 'Cyan',activebackground="#33B5E5", relief=FLAT)
+            button.configure(width=20, background= '#DDD',activebackground="#33B5E5", relief=FLAT)
             button = self.canvas.create_window(650, y, anchor=NW, window=button)
 
             y += 30
@@ -241,6 +249,59 @@ class TicTacToeProjection(object):
         target = self.tr.fire_one_transition(source,action)[0][0]
         if self.tr.detect_win(source,[1,0][source[-1]]) == False:
             self.projection(target)
+
+    def best_move(self,source):
+        actions = self.tr.fireable_transitions_from(source)
+        targets = [self.tr.fire_one_transition(source, action)[0][0] for action in actions]
+
+        board = source
+        best_score = -2
+        move = [1-source[-1],0]
+        for i in range(0,9):
+            if board[i] == -1:
+                board[i] = 1
+                score = Algorithms(self.tr).minimax(board,8,False)
+                board[i] = -1
+                if score > best_score:
+                    best_score = score
+                    move[1] = i
+        return move
+
+
+class Algorithms(object):
+    def __init__(self,tr):
+        self.tr = tr
+
+    def minimax(self,source,depth,max_player):
+        if self.tr.detect_win(source,1):
+            return 1
+        elif self.tr.detect_win(source,0):
+            return -1
+        elif depth == 0:
+            return 0
+
+        board = source
+        if max_player:
+            best_score = -2
+            for i in range(0,9):
+                if board[i] == -1:
+
+                    board[i] = 1
+                    score = self.minimax(board,depth-1,False)
+                    board[i] = -1
+                    if score > best_score:
+                        best_score = score
+            return best_score
+        else:
+            best_score = 2
+            for i in range(0, 9):
+                if board[i] == -1:
+                    board[i] = 0
+                    score = self.minimax(board, depth - 1, True)
+                    board[i] = -1
+                    if score < best_score:
+                        best_score = score
+            return best_score
 
 class TicTacToeMarshaller(AbstractMarshaller):
 
@@ -291,82 +352,6 @@ class TicTacToeAtomEvaluator(AbstractAtomEvaluator):
         for ap in self.propositions:
             result.append(False)
         return result
-
-
-class Tree(object):
-    def __init__(self,root,transitions,children):
-        self.root = root
-        self.children = children
-        self.data = None
-
-    def print_tree_action(self,n):
-        r = "[GEN "+str(n)+"]"+str(self.root)+"("+str(self.data)+")"
-
-        for child in self.children:
-            r += '\n'+str(n*'  ')+' -> '
-            r += str(child.print_tree_action(n+1))
-        return r
-
-    def print_tree(self):
-        return self.print_tree_action(0)
-
-
-    def minimax_action(self,depth,maxPlayer):
-        return
-
-    def minimax(self,depth):
-        return self.minimax_action(depth,True)
-
-
-class TicTacToeTree(AbstractTransitionRelation):
-
-    def __init__(self, tr, depth):
-        self.tr = tr
-        self.depth = depth
-
-    @synchronized # protege la fonction contre des appeles concurrents
-    def initial_configurations(self):
-        return self.tr.initial_configurations()
-
-    @synchronized
-    def fireable_transitions_from(self, source):
-        t = self.create_tree(source, self.depth)
-        print(t.print_tree())
-        return self.tr.fireable_transitions_from(source)
-
-    # executer
-    @synchronized
-    def fire_one_transition(self, source, transition):
-        return self.ui.fire_one_transition(source,transition)
-
-    def create_tree(self,source,n):
-        root = source
-        actions = self.tr.fireable_transitions_from(source)
-
-        children = []
-        target = []
-        transition_list = []
-
-        if n:
-            for action in actions:
-            #transition_list = source[0:(action[1])]+[1-action[0]]+source[(action[1]+1):len(source)]
-                target = self.tr.fire_one_transition(source,action)[0][0]
-                transition_list.append(action)
-                children.append(self.create_tree(target,n-1))
-
-        t = Tree(root,transition_list,children)
-
-        if n == 0:
-            winning = self.tr.detect_win(source,source[-1])
-            print(winning,source[-1])
-            if winning and source[-1] == 1:
-                t.data = 1
-            elif winning:
-                t.data = -1
-            else:
-                t.data = 0
-
-        return t
 
 
 def create_game(canvas):

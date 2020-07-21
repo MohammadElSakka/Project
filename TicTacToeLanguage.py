@@ -5,6 +5,7 @@ from plug_interface import *
 from language_server import *
 from tkinter import *
 import threading
+import numpy as np
 from time import sleep
 
 # nécessaire pour pouvoir executer plusieurs analyses en parallel sur le meme run python
@@ -176,7 +177,6 @@ class TicTacToeProjection(object):
     def projection(self,source):
 
         self.projection_configuration(source)
-
         if source[-1] == 1:
             target = self.tr.fire_one_transition(source,self.best_move(source))[0][0]
             self.projection(target)
@@ -250,22 +250,33 @@ class TicTacToeProjection(object):
         if self.tr.detect_win(source,[1,0][source[-1]]) == False:
             self.projection(target)
 
+    def best_move2(self,source):
+
+        [score,move] = Algorithms(self.tr).minimax2(source,8,True)
+        print(move,score)
+        return move
+
+
     def best_move(self,source):
         actions = self.tr.fireable_transitions_from(source)
         targets = [self.tr.fire_one_transition(source, action)[0][0] for action in actions]
 
-        board = source
         best_score = -2
-        move = [1-source[-1],0]
-        for i in range(0,9):
-            if board[i] == -1:
-                board[i] = 1
-                score = Algorithms(self.tr).minimax(board,8,False)
-                board[i] = -1
-                if score > best_score:
-                    best_score = score
-                    move[1] = i
+
+        move = actions[0]
+
+        i = 0
+        for target in targets:
+
+            score = Algorithms(self.tr).minimax(target,8,False)
+
+            if score > best_score:
+                best_score = score
+                move = actions[i]
+
+            i += 1
         return move
+
 
 
 class Algorithms(object):
@@ -273,14 +284,19 @@ class Algorithms(object):
         self.tr = tr
 
     def minimax(self,source,depth,max_player):
+
         if self.tr.detect_win(source,1):
             return 1
         elif self.tr.detect_win(source,0):
             return -1
         elif depth == 0:
             return 0
+            # fonction x -> proba
+            # fonction o
+            # return difference
 
         board = source
+
         if max_player:
             best_score = -2
             for i in range(0,9):
@@ -303,6 +319,71 @@ class Algorithms(object):
                         best_score = score
             return best_score
 
+    def minimax2(self,source,depth,max_player):
+
+        if self.tr.detect_win(source,0):
+            return [-1,None]
+        elif self.tr.detect_win(source,1):
+            return [1,None]
+        elif depth == 0:
+            return [0,None]
+
+        if max_player:
+            actions = self.tr.fireable_transitions_from(source)
+
+            best_action = None
+            best_score = -1000
+
+            for action in actions:
+                target = self.tr.fire_one_transition(source,action)[0][0]
+
+                [score,act] = self.minimax2(target,depth-1,False)
+                #best_score =  max(best_score,score)
+                if score > best_score:
+                    best_score = score
+                    best_action = action
+
+            return [best_score,best_action]
+
+        else:
+
+            actions = self.tr.fireable_transitions_from(source)
+
+            best_action = None
+            best_score = 1000
+
+            for action in actions:
+                target = self.tr.fire_one_transition(source,action)[0][0]
+
+                [score, act] = self.minimax2(target, depth - 1, True)
+                #best_score = min(best_score, score)
+                if score < best_score:
+                    best_score = score
+                    best_action = action
+
+            return [best_score, best_action]
+
+
+class NeuralNetwork(object):
+    def __init__(self):
+        np.random.seed(1)
+        self.synaptic_weights = 2*np.random.random((10,10)) - 1
+    def sigmoid(self,x):
+        return 1 / (1+np.exp(-x))
+    def sigmoid_derivative(self,x):
+        return x * ( 1 - x)
+    def train(self,training_inputs,training_outputs,training_iterations):
+        for iteration in range(training_iterations):
+            print("iteration ",iteration)
+            output = self.think(training_inputs)
+            error = training_outputs - output
+            adjustments = np.dot(training_inputs.T,error*self.sigmoid_derivative(output))
+            self.synaptic_weights += adjustments
+    def think(self,inputs):
+        inputs = inputs.astype(float)
+        output = self.sigmoid(np.dot(inputs,self.synaptic_weights))
+        print(output)
+        return output
 class TicTacToeMarshaller(AbstractMarshaller):
 
     def __init__(self, soup):
